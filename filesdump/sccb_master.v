@@ -32,7 +32,7 @@ module sccb_master (
         reg_table[6]  = 16'h8C02; // RGB444 → 0 = off; RGB565 mode
         reg_table[7]  = 16'h0400; // COM1  – no CCIR
         reg_table[8]  = 16'h40D0; // COM15 – RGB 565, full range
-        reg_table[9]  = 16'h14IA; // COM9  – AGC x4 (I = 0x1A)
+        reg_table[9]  = 16'h141A; // COM9  – AGC x4 (I = 0x1A)
         reg_table[10] = 16'h4FB3; // MTX1
         reg_table[11] = 16'h50B3; // MTX2
         reg_table[12] = 16'h5100; // MTX3
