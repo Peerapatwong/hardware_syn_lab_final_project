@@ -46,8 +46,9 @@ module sccb_master (
         reg_table[20] = 16'h3200; // HREF
         reg_table[21] = 16'h1903; // VSTART
         reg_table[22] = 16'h1A7B; // VSTOP
+        reg_table[23] = 16'h1E40; // MVFP – mirror/flip: bit6=flip vertical, bit5=mirror horizontal
     end
-    localparam N_REGS = 23;
+    localparam N_REGS = 24;     
 
     // --------------------------------------------------------
     // State machine
