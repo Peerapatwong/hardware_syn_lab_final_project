@@ -30,8 +30,8 @@ module sccb_master (
         reg_table[4]  = 16'h0C00; // COM3
         reg_table[5]  = 16'h3E00; // COM14 - no scaling/PCLK div
         reg_table[6]  = 16'h8C02; // RGB444 → 0 = off; RGB565 mode
-        reg_table[7]  = 16'h0400; // COM1  - no CCIR
-        reg_table[8]  = 16'h40D0; // COM15 - RGB 565, full range
+        reg_table[7]  = 16'h8C00; // COM1  - no CCIR
+        reg_table[8]  = 16'h40C0; // COM15 - RGB 565, full range
         reg_table[9]  = 16'h141A; // COM9  - AGC x4 (I = 0x1A)
         reg_table[10] = 16'h4FB3; // MTX1
         reg_table[11] = 16'h50B3; // MTX2

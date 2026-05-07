@@ -109,7 +109,7 @@ module camera_top (
         .rst       (~pll_locked),
         .hsync     (vga_hsync),
         .vsync     (vga_vsync),
-        .col       (vga_col),
+        .col       (vga_col),   
         .row       (vga_row),
         .active    (vga_active)
     );
