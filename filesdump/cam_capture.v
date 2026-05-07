@@ -29,7 +29,7 @@ module cam_capture (
     reg [7:0]  row      = 0;     // 0..239
     reg        vsync_prev = 0;
 
-    always @(posedge pclk) begin
+    always @(negedge pclk) begin
         wr_en      <= 0;
         vsync_prev <= vsync;
 

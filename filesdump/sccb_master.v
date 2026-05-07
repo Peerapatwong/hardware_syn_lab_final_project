@@ -21,11 +21,11 @@ module sccb_master (
     // Register init table  [addr, value]
     // Minimal set for RGB565, 320x240 (QVGA), 30fps
     // --------------------------------------------------------
-    reg [15:0] reg_table [0:22];
+    reg [15:0] reg_table [0:23];
     initial begin
         reg_table[0]  = 16'h1280; // COM7  – reset
         reg_table[1]  = 16'h1280; // COM7  – reset (double for safety)
-        reg_table[2]  = 16'h1204; // COM7  – RGB output
+        reg_table[2]  = 16'h1214; // COM7  – RGB output and QVGA resolution
         reg_table[3]  = 16'h1100; // CLKRC – no prescaler
         reg_table[4]  = 16'h0C00; // COM3
         reg_table[5]  = 16'h3E00; // COM14 – no scaling/PCLK div
