@@ -1,9 +1,9 @@
 // ============================================================
-// cam_capture.v  –  OV7670 parallel data capture
+// cam_capture.v  -  OV7670 parallel data capture
 //
 // The OV7670 in RGB565 mode sends each pixel as TWO bytes:
-//   Byte 1 (first PCLK):  [R4:R0 G5:G3]  – upper byte
-//   Byte 2 (second PCLK): [G2:G0 B4:B0]  – lower byte
+//   Byte 1 (first PCLK):  [R4:R0 G5:G3]  - upper byte
+//   Byte 2 (second PCLK): [G2:G0 B4:B0]  - lower byte
 //
 // We down-convert to 12-bit RGB444 for BRAM storage:
 //   R[3:0] = byte1[7:4]

@@ -1,5 +1,5 @@
 // ============================================================
-// camera_top.v  –  Top-level: OV7670 → Frame Buffer → VGA
+// camera_top.v  -  Top-level: OV7670 → Frame Buffer → VGA
 // Board  : Basys 3 (Artix-7 XC7A35T)
 // Output : 640x480 @ 60 Hz VGA  (320x240 pixel-doubled)
 // ============================================================
@@ -37,9 +37,9 @@ module camera_top (
 
     clk_wiz_0 clk_gen (
         .clk_in1  (clk100),
-        .clk_out1 (clk25),      // 25 MHz  – VGA
-        .clk_out2 (clk24),      // 24 MHz  – camera XCLK
-        .clk_out3 (clk50),      // 50 MHz  – SCCB & ctrl
+        .clk_out1 (clk25),      // 25 MHz  - VGA
+        .clk_out2 (clk24),      // 24 MHz  - camera XCLK
+        .clk_out3 (clk50),      // 50 MHz  - SCCB & ctrl
         .locked   (pll_locked)
     );
 
@@ -78,7 +78,7 @@ module camera_top (
     );
 
     // --------------------------------------------------------
-    // Frame Buffer  (BRAM – true dual port)
+    // Frame Buffer  (BRAM - true dual port)
     //   Port A : camera write
     //   Port B : VGA read
     // --------------------------------------------------------
@@ -115,10 +115,7 @@ module camera_top (
     );
 
     // Pixel-double: map 640x480 display → 320x240 frame buffer
-    //assign rd_addr = ({1'b0, vga_row[9:1]} * 320) + {1'b0, vga_col[9:1]};
-    wire [8:0] cam_col = vga_row[9:1];               // 0..239
-    wire [8:0] cam_row = 9'd319 - vga_col[9:1];      // flip col axis
-    assign rd_addr = (cam_row * 320) + cam_col;
+    assign rd_addr = ({1'b0, vga_row[9:1]} * 320) + {1'b0, vga_col[9:1]};
     // Note: multiply by 320 can be done as shift+add:
     // row/2 * 256 + row/2 * 64 = (row/2)<<8 + (row/2)<<6
 

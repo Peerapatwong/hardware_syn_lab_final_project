@@ -1,5 +1,5 @@
 // ============================================================
-// frame_buffer.v  –  True Dual-Port BRAM frame buffer
+// frame_buffer.v  -  True Dual-Port BRAM frame buffer
 //
 // Stores 320x240 pixels at 12 bits each = 921,600 bits ≈ 900 Kbits
 // Basys 3 has 1,800 Kbits total BRAM so this fits with room to spare.
@@ -7,7 +7,7 @@
 // Port A : Write (camera clock domain, pclk ~24MHz)
 // Port B : Read  (VGA clock domain,    clk25)
 //
-// Xilinx BRAM primitive inference – Vivado will infer RAMB36E1
+// Xilinx BRAM primitive inference - Vivado will infer RAMB36E1
 // ============================================================
 module frame_buffer (
     // Write port (camera)
@@ -33,13 +33,13 @@ module frame_buffer (
             mem[i] = 12'h888;
     end
 
-    // Port A – synchronous write
+    // Port A - synchronous write
     always @(posedge clka) begin
         if (wea)
             mem[addra] <= dina;
     end
 
-    // Port B – synchronous read (1-cycle latency, fine for VGA pipeline)
+    // Port B - synchronous read (1-cycle latency, fine for VGA pipeline)
     always @(posedge clkb) begin
         doutb <= mem[addrb];
     end

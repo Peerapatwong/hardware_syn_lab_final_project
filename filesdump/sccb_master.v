@@ -1,5 +1,5 @@
 // ============================================================
-// sccb_master.v  –  SCCB (I2C-like) master for OV7670 config
+// sccb_master.v  -  SCCB (I2C-like) master for OV7670 config
 // Writes a fixed register table then asserts done.
 // Clock: 50 MHz input → ~100 kHz SCCB clock
 // ============================================================
@@ -23,16 +23,16 @@ module sccb_master (
     // --------------------------------------------------------
     reg [15:0] reg_table [0:22];
     initial begin
-        reg_table[0]  = 16'h1280; // COM7  – reset
-        reg_table[1]  = 16'h1280; // COM7  – reset (double for safety)
-        reg_table[2]  = 16'h1204; // COM7  – RGB output
-        reg_table[3]  = 16'h1100; // CLKRC – no prescaler
+        reg_table[0]  = 16'h1280; // COM7  - reset
+        reg_table[1]  = 16'h1280; // COM7  - reset (double for safety)
+        reg_table[2]  = 16'h1204; // COM7  - RGB output
+        reg_table[3]  = 16'h1100; // CLKRC - no prescaler
         reg_table[4]  = 16'h0C00; // COM3
-        reg_table[5]  = 16'h3E00; // COM14 – no scaling/PCLK div
+        reg_table[5]  = 16'h3E00; // COM14 - no scaling/PCLK div
         reg_table[6]  = 16'h8C02; // RGB444 → 0 = off; RGB565 mode
-        reg_table[7]  = 16'h0400; // COM1  – no CCIR
-        reg_table[8]  = 16'h40D0; // COM15 – RGB 565, full range
-        reg_table[9]  = 16'h14IA; // COM9  – AGC x4 (I = 0x1A)
+        reg_table[7]  = 16'h0400; // COM1  - no CCIR
+        reg_table[8]  = 16'h40D0; // COM15 - RGB 565, full range
+        reg_table[9]  = 16'h14IA; // COM9  - AGC x4 (I = 0x1A)
         reg_table[10] = 16'h4FB3; // MTX1
         reg_table[11] = 16'h50B3; // MTX2
         reg_table[12] = 16'h5100; // MTX3
@@ -40,15 +40,14 @@ module sccb_master (
         reg_table[14] = 16'h53A7; // MTX5
         reg_table[15] = 16'h54E4; // MTX6
         reg_table[16] = 16'h589E; // MTXS
-        reg_table[17] = 16'h3DC8; // COM13 – gamma, UV
+        reg_table[17] = 16'h3DC8; // COM13 - gamma, UV
         reg_table[18] = 16'h1714; // HSTART
         reg_table[19] = 16'h1802; // HSTOP
         reg_table[20] = 16'h3200; // HREF
         reg_table[21] = 16'h1903; // VSTART
         reg_table[22] = 16'h1A7B; // VSTOP
-        reg_table[23] = 16'h1E40; // MVFP – mirror/flip: bit6=flip vertical, bit5=mirror horizontal
     end
-    localparam N_REGS = 24;     
+    localparam N_REGS = 23;
 
     // --------------------------------------------------------
     // State machine

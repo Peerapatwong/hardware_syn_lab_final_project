@@ -1,5 +1,5 @@
 // ============================================================
-// vga_sync.v  –  640x480 @ 60 Hz VGA timing generator
+// vga_sync.v  -  640x480 @ 60 Hz VGA timing generator
 //
 // Standard 640x480 timing (25.175 MHz pixel clock, use 25 MHz):
 //   Horizontal (per line):
