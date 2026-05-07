@@ -21,7 +21,7 @@ module sccb_master (
     // Register init table  [addr, value]
     // Minimal set for RGB565, 320x240 (QVGA), 30fps
     // --------------------------------------------------------
-    reg [15:0] reg_table [0:22];
+    reg [15:0] reg_table [0:23];
     initial begin
         reg_table[0]  = 16'h1280; // COM7  - reset
         reg_table[1]  = 16'h1280; // COM7  - reset (double for safety)
@@ -32,7 +32,7 @@ module sccb_master (
         reg_table[6]  = 16'h8C02; // RGB444 → 0 = off; RGB565 mode
         reg_table[7]  = 16'h0400; // COM1  - no CCIR
         reg_table[8]  = 16'h40D0; // COM15 - RGB 565, full range
-        reg_table[9]  = 16'h14IA; // COM9  - AGC x4 (I = 0x1A)
+        reg_table[9]  = 16'h141A; // COM9  - AGC x4 (I = 0x1A)
         reg_table[10] = 16'h4FB3; // MTX1
         reg_table[11] = 16'h50B3; // MTX2
         reg_table[12] = 16'h5100; // MTX3
