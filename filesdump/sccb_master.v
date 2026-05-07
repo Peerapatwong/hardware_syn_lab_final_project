@@ -25,7 +25,7 @@ module sccb_master (
     initial begin
         reg_table[0]  = 16'h1280; // COM7  - reset
         reg_table[1]  = 16'h1280; // COM7  - reset (double for safety)
-        reg_table[2]  = 16'h1204; // COM7  - RGB output
+        reg_table[2]  = 16'h1214; // COM7  - RGB output
         reg_table[3]  = 16'h1100; // CLKRC - no prescaler
         reg_table[4]  = 16'h0C00; // COM3
         reg_table[5]  = 16'h3E00; // COM14 - no scaling/PCLK div
@@ -117,6 +117,7 @@ module sccb_master (
                 S_START: begin
                     sda_oe  <= 1;
                     sda_out <= 0;
+                    scl<=1;
                     // after this SCL goes low, send address
                     if (tick) begin
                         shift_out <= CAM_ADDR;

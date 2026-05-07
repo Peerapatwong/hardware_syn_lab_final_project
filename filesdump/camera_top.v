@@ -115,7 +115,8 @@ module camera_top (
     );
 
     // Pixel-double: map 640x480 display → 320x240 frame buffer
-    assign rd_addr = ({1'b0, vga_row[9:1]} * 320) + {1'b0, vga_col[9:1]};
+    //assign rd_addr = ({1'b0, vga_row[9:1]} * 320) + {1'b0, vga_col[9:1]};
+    assign rd_addr = (vga_row[9:1] << 8) + (vga_row[9:1] << 6) + vga_col[9:1];
     // Note: multiply by 320 can be done as shift+add:
     // row/2 * 256 + row/2 * 64 = (row/2)<<8 + (row/2)<<6
 

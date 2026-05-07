@@ -25,7 +25,7 @@ module cam_capture (
 
     reg        byte_sel = 0;     // 0=first byte, 1=second byte
     reg [7:0]  byte1    = 0;
-    reg [8:0]  col      = 0;     // 0..319
+    reg [9:0]  col      = 0;     // 0..
     reg [7:0]  row      = 0;     // 0..239
     reg        vsync_prev = 0;
 
@@ -60,9 +60,9 @@ module cam_capture (
                 end
 
                 // Advance column
-                if (col < 319) begin
-                    col <= col + 1;
-                end
+                
+                   col <= col + 1;
+                
             end
         end else begin
             // HREF just went low → end of line
