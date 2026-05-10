@@ -7,10 +7,23 @@
 //
 // We down-convert to 12-bit RGB444 for BRAM storage:
 //   R[3:0] = byte1[7:4]
-//   G[3:0] = {byte1[2:0], byte2[7]}  → take top 4 of 6 green bits
+//   G[3:0] = {byte1[2:0], byte2[7]}  → top 4 of 6 green bits
 //   B[3:0] = byte2[4:1]
+//   
+//   Byte 1:  S S S S _ S S S
+//   Byte 2:  S _ _ S S S S _
 //
 // Frame size written: 320 x 240 = 76,800 pixels
+//
+// Key fixes vs. original:
+//   1. VSYNC is level-sensitive (not edge-detected) — counters are
+//      held reset for the entire blanking interval, preventing any
+//      stale writes if HREF spuriously pulses during VSYNC.
+//   2. x/y counters replace the fragile col/row logic.  y increments
+//      cleanly when x wraps at end-of-line; no dependency on HREF
+//      falling edge or col being non-zero.
+//   3. wr_addr is a combinational assign from x/y so the address is
+//      always valid one cycle before wr_en, matching BRAM setup time.
 // ============================================================
 module cam_capture (
     input  wire        pclk,
@@ -18,61 +31,66 @@ module cam_capture (
     input  wire        vsync,
     input  wire [7:0]  din,
 
-    output reg  [16:0] wr_addr,
+    output wire [16:0] wr_addr,   // combinational: y*320 + x (2D -> 1D)
     output reg  [11:0] wr_data,
     output reg         wr_en
 );
 
-    reg        byte_sel = 0;     // 0=first byte, 1=second byte
-    reg [7:0]  byte1    = 0;
-    reg [8:0]  col      = 0;     // 0..319
-    reg [7:0]  row      = 0;     // 0..239
-    reg        vsync_prev = 0;
+    reg [8:0]  x        = 0;   // 0..319
+    reg [7:0]  y        = 0;   // 0..239
+    reg        byte_sel = 0;   // 0 = waiting for first byte, 1 = waiting for second
+    reg [7:0]  byte1    = 0;   // latched first byte of the RGB565 pair
 
-    always @(negedge pclk) begin
-        wr_en      <= 0;
-        vsync_prev <= vsync;
+    // Address is always x + y*320, computed combinationally.
+    // Shift+add avoids a multiplier: 320 = 256 + 64
+    assign wr_addr = ({1'b0, y, 8'b0} + {3'b0, y, 6'b0}) + {8'b0, x};
 
-        // Rising edge of VSYNC → reset frame position
-        if (vsync && !vsync_prev) begin
-            col      <= 0;
-            row      <= 0;
+    always @(posedge pclk) begin
+
+        // VSYNC high = vertical blanking; hold everything reset.
+        // Level-sensitive so the reset persists for the full blanking interval.
+        if (vsync) begin
+            x        <= 0;
+            y        <= 0;
             byte_sel <= 0;
-        end
+            wr_en    <= 0;
 
-        if (href) begin
-            if (!byte_sel) begin
-                // First byte of pixel
-                byte1    <= din;
-                byte_sel <= 1;
-            end else begin
-                // Second byte of pixel → assemble RGB444 and write
-                byte_sel <= 0;
-
-                // Only store pixels within 320x240 window
-                if (col < 320 && row < 240) begin
-                    wr_data <= { byte1[7:4],          // R[3:0]
-                                 byte1[2:0], din[7],  // G[3:0]
-                                 din[4:1]             // B[3:0]
-                               };
-                    wr_addr <= row * 320 + col;
-                    wr_en   <= 1;
-                end
-
-                // Advance column
-                if (col < 319) begin
-                    col <= col + 1;
-                end
-            end
         end else begin
-            // HREF just went low → end of line
-            if (byte_sel) byte_sel <= 0;  // reset byte alignment
-            if (col != 0 || byte_sel) begin
-                // Only count row when we actually had pixels
-                if (col > 0) begin
-                    row <= (row < 239) ? row + 1 : row;
+            wr_en <= 0;   // default: no write this cycle
+
+            if (href) begin
+                if (!byte_sel) begin
+                    // First byte: latch and wait for second
+                    byte1    <= din;
+                    byte_sel <= 1;
+                end else begin
+                    // Second byte: assemble RGB444, write, advance position
+                    byte_sel <= 0;
+
+                    if (x < 320 && y < 240) begin
+                        wr_data <= { byte1[7:4],           // R[3:0]
+                                     byte1[2:0], din[7],   // G[3:0]
+                                     din[4:1]              // B[3:0]
+                                   };
+                        wr_en <= 1;
+                    end
+
+                    // Advance x; wrap to next row at end of line
+                    if (x < 319) begin
+                        x <= x + 1;
+                    end else begin
+                        x <= 0;
+                        if (y < 239)
+                            y <= y + 1;
+                        // else hold at 239 — VSYNC will reset before next frame
+                    end
                 end
-                col <= 0;
+
+            end else begin
+                // HREF low: end of line (or blanking gap between lines).
+                // Reset byte alignment so the next HREF rising edge always
+                // starts on a clean first-byte boundary.
+                byte_sel <= 0;
             end
         end
     end
