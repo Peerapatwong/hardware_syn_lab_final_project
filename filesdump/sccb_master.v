@@ -242,6 +242,7 @@ module sccb_master (
     reg [7:0]  shift_out;
     reg        sda_out = 1;
     reg        sda_oe  = 0;      // output enable
+    reg [7:0]  pause_cnt = 0;    // delay counter after reset
 
     assign sda = sda_oe ? sda_out : 1'bz;
 
@@ -287,6 +288,7 @@ module sccb_master (
                 S_START: begin
                     sda_oe  <= 1;
                     sda_out <= 0;
+                    scl     <= 1; // <--- Keep SCL high
                     if (tick) begin
                         shift_out <= CAM_ADDR;
                         bit_cnt   <= 7;
@@ -366,7 +368,7 @@ module sccb_master (
                 S_STOP: begin
                     sda_oe  <= 1;
                     sda_out <= 0;
-                    if (phase == 2) sda_out <= 1; // SDA rises during SCL high
+                    if (phase == 3) sda_out <= 1; // SDA rises during SCL high
                     if (tick) begin
                         state <= S_PAUSE;
                     end
@@ -375,11 +377,16 @@ module sccb_master (
                 // Inter-transaction gap (one SCCB clock period ≈ 10 µs)
                 S_PAUSE: begin
                     if (tick) begin
-                        if (reg_idx == N_REGS - 1) begin
-                            state <= S_DONE;
+                        if (pause_cnt < 250) begin
+                            pause_cnt <= pause_cnt + 1;
                         end else begin
-                            reg_idx <= reg_idx + 1;
-                            state   <= S_IDLE;
+                            pause_cnt <= 0;
+                            if (reg_idx == N_REGS - 1) begin
+                                state <= S_DONE;
+                            end else begin
+                                reg_idx <= reg_idx + 1;
+                                state   <= S_IDLE;
+                            end
                         end
                     end
                 end
