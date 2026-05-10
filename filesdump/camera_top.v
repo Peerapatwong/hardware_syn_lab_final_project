@@ -118,7 +118,7 @@ module camera_top (
     //assign rd_addr = ({1'b0, vga_row[9:1]} * 320) + {1'b0, vga_col[9:1]};
     wire [8:0] cam_col = vga_row[9:1];               // 0..239
     wire [8:0] cam_row = 9'd319 - vga_col[9:1];      // flip col axis
-    assign rd_addr = (cam_row * 320) + cam_col;
+    assign rd_addr = {cam_row, 8'd0} + {cam_row, 6'd0} + cam_col;
     // Note: multiply by 320 can be done as shift+add:
     // row/2 * 256 + row/2 * 64 = (row/2)<<8 + (row/2)<<6
 
