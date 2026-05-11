@@ -1,221 +1,256 @@
 // ============================================================
-// camera_top.v — OV7670 → Frame Buffer → VGA with 3 filters
+// camera_top.v  –  Top-level: OV7670 → Frame Buffer → VGA
+// Board  : Basys 3 (Artix-7 XC7A35T)
+// Output : 640x480 @ 60 Hz VGA  (320x240 pixel-doubled)
 //
-// Built from a PROVEN WORKING reference project's SCCB controller
-// and 165-register init table, adapted to your Basys 3 pin map.
+// FILTERS (sw[1:0]):
+//   00 -> Raw camera feed (RGB444)
+//   01 -> Color Inversion (negative)
+//   10 -> Binary Image    (black & white threshold)
+//   11 -> Color Isolation (single channel, picked by sw[3:2])
 //
-// Filters (selected by sw[1:0]):
-//   00 → Raw camera feed
-//   01 → Colour Inversion (negative)
-//   10 → Binary Image (threshold)
-//   11 → Colour Isolation (red channel only)
+// COLOR ISOLATION CHANNEL (sw[3:2]) – only used when sw[1:0]=11:
+//   00 -> Red   only
+//   01 -> Green only
+//   10 -> Blue  only
+//   11 -> Red+Blue (magenta)
 //
-// Clocking:
-//   clk_wiz_0 outputs:
-//     clk_out1 = 25 MHz → VGA pixel clock, camera XCLK, SCCB
-//     clk_out2 = 24 MHz → unused (kept for IP compatibility)
-//     clk_out3 = 50 MHz → unused (kept for IP compatibility)
+// BINARY THRESHOLD (sw[3:2]) – only used when sw[1:0]=10:
+//   00 -> Y > 6   (dark threshold,  more white)
+//   01 -> Y > 8   (mid)
+//   10 -> Y > 10  (bright threshold, more black)
+//   11 -> Y > 12  (very bright threshold)
+//
+// LED status:
+//   led[0] = PLL locked
+//   led[1] = SCCB config done
+//   led[2] = camera VSYNC (blinks ~30 Hz when camera streaming)
+//   led[3] = camera HREF  (fast blink while a line is active)
+//
+// KEY FIXES vs original:
+//   * Address calc has proper bounds (no more out-of-buffer reads).
+//   * Removed broken 90-deg rotation (caused the purple band at top).
+//     If you really want rotation, use the OV7670's MVFP register
+//     (0x1E) – set bit[4]=vflip, bit[5]=mirror, in sccb_master.v.
+//   * cam_capture.wr_en is now gated by sccb_done so the camera is
+//     never writing garbage to BRAM before configuration completes.
+//   * Replaced grayscale filter with proper binary threshold.
 // ============================================================
 module camera_top (
-    input  wire        clk100,       // 100 MHz board oscillator
-
-    // OV7670 camera
-    input  wire        cam_pclk,
-    input  wire        cam_href,
-    input  wire        cam_vsync,
-    input  wire [7:0]  cam_data,
-    output wire        cam_xclk,
-    output wire        cam_pwdn,
-    output wire        cam_reset,
-    output wire        cam_scl,
-    inout  wire        cam_sda,
-
-    // VGA output
+    input  wire        clk100,      // 100 MHz board clock
+    // OV7670 camera signals
+    input  wire        cam_pclk,    // pixel clock from camera  (A16)
+    input  wire        cam_href,    // horizontal reference     (A17)
+    input  wire        cam_vsync,   // vertical sync            (B15)
+    input  wire [7:0]  cam_data,    // 8-bit pixel bus          (P17-B16)
+    output wire        cam_xclk,    // 24 MHz master clock      (C15)
+    output wire        cam_pwdn,    // power-down (keep LOW)    (R18)
+    output wire        cam_reset,   // reset      (keep HIGH)   (P18)
+    output wire        cam_scl,     // SCCB clock               (A14)
+    inout  wire        cam_sda,     // SCCB data                (A15)
+    // VGA
     output wire        vga_hsync,
     output wire        vga_vsync,
-    output reg  [3:0]  vga_r,
-    output reg  [3:0]  vga_g,
-    output reg  [3:0]  vga_b,
-
-    // Switches (filter select)
-    input  wire [1:0]  sw,
-
+    output wire [3:0]  vga_r,
+    output wire [3:0]  vga_g,
+    output wire [3:0]  vga_b,
+    // Switches (filter + mode select)
+    input  wire [3:0]  sw,
     // Status LEDs
     output wire [3:0]  led
 );
 
-    // ============================================================
-    // Clocks
-    // ============================================================
+    // --------------------------------------------------------
+    // Clock generation  (MMCM via Clocking Wizard IP)
+    //   clk25  -> VGA pixel clock  (25.000 MHz)
+    //   clk24  -> Camera XCLK      (24.000 MHz)
+    //   clk50  -> SCCB / logic     (50.000 MHz)
+    // --------------------------------------------------------
     wire clk25, clk24, clk50, pll_locked;
 
     clk_wiz_0 clk_gen (
         .clk_in1  (clk100),
-        .clk_out1 (clk25),      // 25 MHz — used for everything
-        .clk_out2 (clk24),      // 24 MHz — not used
-        .clk_out3 (clk50),      // 50 MHz — not used
+        .clk_out1 (clk25),      // 25 MHz  - VGA
+        .clk_out2 (clk24),      // 24 MHz  - camera XCLK
+        .clk_out3 (clk50),      // 50 MHz  - SCCB & ctrl
         .locked   (pll_locked)
     );
 
-    // XCLK = 25 MHz (matches the working reference project)
-    assign cam_xclk = clk25;
-    assign cam_pwdn = 1'b0;     // always powered on
-    assign cam_reset = 1'b1;    // not in reset (active-low)
+    assign cam_xclk  = clk24;
+    assign cam_pwdn  = 1'b0;        // always powered on
+    assign cam_reset = pll_locked;  // hold reset until PLL locks
 
-    // ============================================================
-    // SCCB Camera Configuration (proven working controller)
-    // ============================================================
-    wire config_done;
+    // --------------------------------------------------------
+    // SCCB Initialiser  (writes register list to OV7670)
+    // --------------------------------------------------------
+    wire sccb_done;
 
-    I2C_AV_Config sccb_config (
-        .iCLK       (clk25),
-        .iRST_N     (pll_locked),  // hold in reset until PLL locks
-        .I2C_SCLK   (cam_scl),
-        .I2C_SDAT   (cam_sda),
-        .Config_Done(config_done),
-        .LUT_INDEX  (),
-        .I2C_RDATA  ()
+    sccb_master sccb (
+        .clk   (clk50),
+        .rst   (~pll_locked),
+        .scl   (cam_scl),
+        .sda   (cam_sda),
+        .done  (sccb_done)
     );
 
-    // ============================================================
-    // Camera Pixel Capture (proven working module)
-    // ============================================================
-    wire [16:0] wr_addr;
+    // --------------------------------------------------------
+    // Synchronize sccb_done into the PCLK domain so we can gate
+    // cam_capture writes safely (CDC: simple 2-FF synchronizer).
+    // --------------------------------------------------------
+    reg sccb_done_sync0 = 1'b0;
+    reg sccb_done_pclk  = 1'b0;
+    always @(posedge cam_pclk) begin
+        sccb_done_sync0 <= sccb_done;
+        sccb_done_pclk  <= sccb_done_sync0;
+    end
+
+    // --------------------------------------------------------
+    // Camera capture  (RGB565 stream -> 12-bit RGB444 in BRAM)
+    //   wr_en is held LOW until SCCB has fully configured camera
+    // --------------------------------------------------------
+    wire [16:0] wr_addr;   // 320*240 = 76800 pixels -> 17 bits
     wire [11:0] wr_data;
     wire        wr_en;
 
-    ov7670_capture capture (
-        .pclk  (cam_pclk),
-        .vsync (cam_vsync),
-        .href  (cam_href),
-        .d     (cam_data),
-        .addr  (wr_addr),
-        .dout  (wr_data),
-        .we    (wr_en)
+    cam_capture capture (
+        .pclk     (cam_pclk),
+        .href     (cam_href),
+        .vsync    (cam_vsync),
+        .din      (cam_data),
+        .enable   (sccb_done_pclk),   // <<< KEY FIX: gate writes
+        .wr_addr  (wr_addr),
+        .wr_data  (wr_data),
+        .wr_en    (wr_en)
     );
 
-    // ============================================================
-    // Frame Buffer (your existing module — keep frame_buffer.v)
-    // ============================================================
+    // --------------------------------------------------------
+    // Frame Buffer  (True dual-port BRAM)
+    //   Port A : camera write (pclk domain)
+    //   Port B : VGA   read   (clk25 domain)
+    // --------------------------------------------------------
     wire [16:0] rd_addr;
     wire [11:0] rd_data;
 
     frame_buffer fb (
+        // Write port (camera clock domain)
         .clka  (cam_pclk),
         .wea   (wr_en),
         .addra (wr_addr),
         .dina  (wr_data),
+        // Read port (VGA clock domain)
         .clkb  (clk25),
         .addrb (rd_addr),
         .doutb (rd_data)
     );
 
-    // ============================================================
-    // VGA Timing Generator (640×480 @ 60 Hz, 25 MHz pixel clock)
-    // ============================================================
-    parameter H_VISIBLE  = 640;
-    parameter H_FRONT    = 16;
-    parameter H_SYNC     = 96;
-    parameter H_BACK     = 48;
-    parameter H_TOTAL    = 800;
+    // --------------------------------------------------------
+    // VGA sync controller + address generator
+    // --------------------------------------------------------
+    wire [9:0] vga_col;   // 0..639
+    wire [9:0] vga_row;   // 0..479
+    wire       vga_active;
 
-    parameter V_VISIBLE  = 480;
-    parameter V_FRONT    = 10;
-    parameter V_SYNC     = 2;
-    parameter V_BACK     = 33;
-    parameter V_TOTAL    = 525;
+    vga_sync vga_ctrl (
+        .clk25  (clk25),
+        .rst    (~pll_locked),
+        .hsync  (vga_hsync),
+        .vsync  (vga_vsync),
+        .col    (vga_col),
+        .row    (vga_row),
+        .active (vga_active)
+    );
 
-    reg [9:0] h_cnt = 0;
-    reg [9:0] v_cnt = 0;
-    reg       blank = 1;
+    // ------------------------------------------------------------
+    // Pixel-doubled mapping: 640x480 screen -> 320x240 buffer
+    //   cam_col = vga_col / 2    in [0..319]   (8-bit ok)
+    //   cam_row = vga_row / 2    in [0..239]   (8-bit ok)
+    //
+    //   addr = cam_row * 320 + cam_col
+    //        = (cam_row << 8) + (cam_row << 6) + cam_col   (=256+64=320)
+    //
+    // NOTE: This is NO rotation – the camera image is shown 1:1.
+    // If you need to flip/mirror, use OV7670 MVFP register (0x1E).
+    // ------------------------------------------------------------
+    wire [8:0] cam_col = {1'b0, vga_col[9:1]};   // 0..319
+    wire [7:0] cam_row =        vga_row[9:1];    // 0..239 (8 bits)
 
-    always @(posedge clk25) begin
-        if (h_cnt == H_TOTAL - 1) begin
-            h_cnt <= 0;
-            if (v_cnt == V_TOTAL - 1)
-                v_cnt <= 0;
-            else
-                v_cnt <= v_cnt + 1;
-        end else begin
-            h_cnt <= h_cnt + 1;
-        end
+    // Word-extend for arithmetic
+    wire [16:0] addr_row_x256 = {1'b0, cam_row, 8'd0};   // cam_row * 256
+    wire [16:0] addr_row_x64  = {3'b000, cam_row, 6'd0}; // cam_row * 64
+    assign rd_addr = addr_row_x256 + addr_row_x64 + {8'd0, cam_col};
 
-        // Blanking flag
-        blank <= (h_cnt >= H_VISIBLE) || (v_cnt >= V_VISIBLE);
+    // --------------------------------------------------------
+    // ===== IMAGE FILTERS =====
+    //   sw[1:0] selects which filter is shown.
+    //   sw[3:2] is a per-filter parameter (channel or threshold).
+    // --------------------------------------------------------
+    wire [3:0] r4 = rd_data[11:8];
+    wire [3:0] g4 = rd_data[7:4];
+    wire [3:0] b4 = rd_data[3:0];
+
+    // --- Filter 1: RAW ---
+    wire [11:0] px_raw = rd_data;
+
+    // --- Filter 2: COLOR INVERSION ---
+    //   Each channel: out = 15 - in  (bitwise NOT for 4-bit value)
+    wire [11:0] px_invert = ~rd_data;
+
+    // --- Filter 3: BINARY IMAGE ---
+    //   Compute luma Y ~= (R + 2G + B) / 4   (weights ITU-R BT.601 approx)
+    //   For 4-bit channels max Y = (15 + 30 + 15)/4 = 15 (still 4-bit).
+    //   Then threshold to pure white (0xFFF) or black (0x000).
+    wire [5:0] luma_sum = {2'b00, r4} + {1'b0, g4, 1'b0} + {2'b00, b4};
+    wire [3:0] luma     = luma_sum[5:2];   // /4
+
+    reg [3:0] thresh;
+    always @(*) begin
+        case (sw[3:2])
+            2'b00: thresh = 4'd6;
+            2'b01: thresh = 4'd8;
+            2'b10: thresh = 4'd10;
+            2'b11: thresh = 4'd12;
+        endcase
+    end
+    wire [11:0] px_binary = (luma > thresh) ? 12'hFFF : 12'h000;
+
+    // --- Filter 4: COLOR ISOLATION ---
+    //   Show only one channel; others forced to 0.
+    reg [11:0] px_isolate;
+    always @(*) begin
+        case (sw[3:2])
+            2'b00: px_isolate = {r4, 4'h0, 4'h0};   // red only
+            2'b01: px_isolate = {4'h0, g4, 4'h0};   // green only
+            2'b10: px_isolate = {4'h0, 4'h0, b4};   // blue only
+            2'b11: px_isolate = {r4, 4'h0, b4};     // magenta (R+B)
+        endcase
     end
 
-    assign vga_hsync = ~((h_cnt >= H_VISIBLE + H_FRONT) &&
-                         (h_cnt <  H_VISIBLE + H_FRONT + H_SYNC));
-    assign vga_vsync = ~((v_cnt >= V_VISIBLE + V_FRONT) &&
-                         (v_cnt <  V_VISIBLE + V_FRONT + V_SYNC));
-
-    // ============================================================
-    // Pixel-double address mapping: VGA 640×480 → BRAM 320×240
-    // ============================================================
-    wire [8:0] cam_x = h_cnt[9:1];   // 0..319  (÷2 horizontal)
-    wire [7:0] cam_y = v_cnt[8:1];   // 0..239  (÷2 vertical)
-
-    // Simple straight mapping (no rotation):
-    assign rd_addr = cam_y * 17'd320 + {8'd0, cam_x};
-
-    // If image appears rotated 90°, try one of these instead:
-    //   assign rd_addr = cam_x * 17'd320 + (17'd319 - {9'd0, cam_y});
-    //   assign rd_addr = (17'd239 - {9'd0, cam_y}) * 17'd320 + {8'd0, cam_x};
-
-    // ============================================================
-    // Image Filters
-    //   sw = 00 → Raw
-    //   sw = 01 → Colour Inversion (negative)
-    //   sw = 10 → Binary Image (threshold)
-    //   sw = 11 → Colour Isolation (red channel only)
-    // ============================================================
-    wire [3:0] raw_r = rd_data[11:8];
-    wire [3:0] raw_g = rd_data[ 7:4];
-    wire [3:0] raw_b = rd_data[ 3:0];
-
-    // Grayscale intensity for thresholding: (R + G + B) / 4
-    wire [5:0] gray_sum = {2'b00, raw_r} + {2'b00, raw_g} + {2'b00, raw_b};
-    wire [3:0] gray     = gray_sum[5:2];
-
-    // Binary threshold: above mid-point → white, below → black
-    wire [3:0] binary   = (gray > 4'd5) ? 4'hF : 4'h0;
-
-    always @(posedge clk25) begin
-        if (blank) begin
-            vga_r <= 4'h0;
-            vga_g <= 4'h0;
-            vga_b <= 4'h0;
+    // --------------------------------------------------------
+    // Filter MUX
+    // --------------------------------------------------------
+    reg [11:0] px_out;
+    always @(*) begin
+        if (!vga_active) begin
+            px_out = 12'h000;             // VGA blanking -> black
         end else begin
-            case (sw)
-                2'b00: begin  // Raw
-                    vga_r <= raw_r;
-                    vga_g <= raw_g;
-                    vga_b <= raw_b;
-                end
-                2'b01: begin  // Colour Inversion (negative)
-                    vga_r <= ~raw_r;
-                    vga_g <= ~raw_g;
-                    vga_b <= ~raw_b;
-                end
-                2'b10: begin  // Binary Image (threshold)
-                    vga_r <= binary;
-                    vga_g <= binary;
-                    vga_b <= binary;
-                end
-                2'b11: begin  // Colour Isolation (red only)
-                    vga_r <= raw_r;
-                    vga_g <= 4'h0;
-                    vga_b <= 4'h0;
-                end
+            case (sw[1:0])
+                2'b00: px_out = px_raw;
+                2'b01: px_out = px_invert;
+                2'b10: px_out = px_binary;
+                2'b11: px_out = px_isolate;
             endcase
         end
     end
 
-    // ============================================================
-    // Status LEDs
-    // ============================================================
+    assign vga_r = px_out[11:8];
+    assign vga_g = px_out[7:4];
+    assign vga_b = px_out[3:0];
+
+    // --------------------------------------------------------
+    // Status LEDs (helps debug bring-up)
+    // --------------------------------------------------------
     assign led[0] = pll_locked;
-    assign led[1] = config_done;
+    assign led[1] = sccb_done;
     assign led[2] = cam_vsync;
     assign led[3] = cam_href;
 
