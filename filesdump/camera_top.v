@@ -161,20 +161,49 @@ module camera_top (
     );
 
     // ------------------------------------------------------------
-    // Pixel-doubled mapping: 640x480 screen -> 320x240 buffer
-    //   cam_col = vga_col / 2    in [0..319]   (8-bit ok)
-    //   cam_row = vga_row / 2    in [0..239]   (8-bit ok)
+    // Pixel-doubled mapping with 90 deg CCW rotation
     //
-    //   addr = cam_row * 320 + cam_col
-    //        = (cam_row << 8) + (cam_row << 6) + cam_col   (=256+64=320)
+    // The OV7670 module is physically mounted sideways, so the raw
+    // sensor image looks rotated 90 deg CW.  To display it correctly
+    // we rotate it 90 deg CCW in the read-out address calculation.
     //
-    // NOTE: This is NO rotation – the camera image is shown 1:1.
-    // If you need to flip/mirror, use OV7670 MVFP register (0x1E).
+    // Geometry:
+    //   - Source frame buffer    : 320 wide x 240 tall (landscape)
+    //   - After 90 CCW rotation  : 240 wide x 320 tall (portrait)
+    //   - Display screen         : 320 wide x 240 tall (landscape)
+    //
+    // Because the rotated content is taller than the screen, we
+    // crop top/bottom 40 source columns (showing middle 240 of 320).
+    // Because it's narrower than the screen, we letterbox with
+    // black bars 40 px wide on the left and right.
+    //
+    //   col=0..39   -> BLACK BAR
+    //   col=40..279 -> rotated image (240 wide)
+    //   col=280..319-> BLACK BAR
+    //
+    // 90 CCW rotation formula (derived):
+    //   source_col = (source_width - 1) - rotated_row
+    //   source_row =                       rotated_col
+    //
     // ------------------------------------------------------------
-    wire [8:0] cam_col = {1'b0, vga_col[9:1]};   // 0..319
-    wire [7:0] cam_row =        vga_row[9:1];    // 0..239 (8 bits)
+    wire [8:0] sx = {1'b0, vga_col[9:1]};   // screen x: 0..319
+    wire [7:0] sy =        vga_row[9:1];    // screen y: 0..239
 
-    // Word-extend for arithmetic
+    // True when inside the rotated image (not in a letterbox bar)
+    wire in_image = (sx >= 9'd40) && (sx < 9'd280);
+
+    // Map screen coords -> rotated-image coords -> source coords
+    //   rotated_col = sx - 40         (range 0..239)
+    //   rotated_row = sy + 40         (range 40..279, picks middle 240 rows)
+    //   cam_col     = 319 - rotated_row = 319 - (sy + 40) = 279 - sy
+    //                                                       (range 40..279)
+    //   cam_row     = rotated_col     = sx - 40 (range 0..239)
+    wire [8:0] cam_col      = 9'd279 - {1'b0, sy};    // 0..319 width source
+    wire [8:0] cam_row_9bit = sx     - 9'd40;         // 9-bit safe subtract
+    wire [7:0] cam_row      = cam_row_9bit[7:0];      // 0..239 height source
+
+    // addr = cam_row * 320 + cam_col
+    //      = (cam_row << 8) + (cam_row << 6) + cam_col   (=256+64=320)
     wire [16:0] addr_row_x256 = {1'b0, cam_row, 8'd0};   // cam_row * 256
     wire [16:0] addr_row_x64  = {3'b000, cam_row, 6'd0}; // cam_row * 64
     assign rd_addr = addr_row_x256 + addr_row_x64 + {8'd0, cam_col};
@@ -226,12 +255,14 @@ module camera_top (
     end
 
     // --------------------------------------------------------
-    // Filter MUX
+    // Filter MUX (also handles letterbox black bars)
     // --------------------------------------------------------
     reg [11:0] px_out;
     always @(*) begin
         if (!vga_active) begin
             px_out = 12'h000;             // VGA blanking -> black
+        end else if (!in_image) begin
+            px_out = 12'h000;             // letterbox bars -> black
         end else begin
             case (sw[1:0])
                 2'b00: px_out = px_raw;
