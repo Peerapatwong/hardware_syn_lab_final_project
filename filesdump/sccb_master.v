@@ -57,10 +57,14 @@ module sccb_master (
         reg_table[6]   = 16'h3a04; // TSLB  – YUYV sequence
         reg_table[7]   = 16'h3dc8; // COM13 – gamma enable, UV auto adjust
 
-        // TWEAK: MVFP – mirror ON, vflip OFF (preview shows yourself
-        // as in a real mirror).  Change to 0x01 for no flip, 0x11 for
-        // vflip only, 0x31 for both.
-        reg_table[8]   = 16'h1e21; // MVFP
+        // TWEAK (FIX): MVFP – mirror ON + VFLIP ON to correct the
+        // upside-down image observed on hardware.  The OV7670 sensor on
+        // this module is physically rotated so VFLIP is needed.
+        //   0x01 = normal       (no mirror, no flip)
+        //   0x11 = vflip only   (text readable, up is down -> fixed)
+        //   0x21 = mirror only  (was OLD value -> caused upside-down)
+        //   0x31 = mirror+vflip (CURRENT - 180 deg total, "selfie style")
+        reg_table[8]   = 16'h1e31; // MVFP (was 0x21)
 
         reg_table[9]   = 16'h6b00; // DBLV  – PLL bypass
         reg_table[10]  = 16'h32b6; // HREF
@@ -196,8 +200,19 @@ module sccb_master (
 
         // ----- Misc -----
         reg_table[121] = 16'h4108; // COM21 (partial)
-        reg_table[122] = 16'h3f00; // EDGE  – edge enhancement OFF
 
+        // TWEAK (FIX): EDGE – enable edge enhancement to compensate for
+        // the GLUED LENS that cannot be focused mechanically.  This adds
+        // digital sharpening inside the sensor.  Higher = sharper but
+        // more pink/purple fringes around bright edges.
+        //   0x00 = off  (was OLD value -> looked blurry)
+        //   0x04 = mild sharpening
+        //   0x06 = moderate (CURRENT - good balance for fixed lens)
+        //   0x0a = aggressive (too much fringing usually)
+        reg_table[122] = 16'h3f06; // EDGE (was 0x00)
+
+        // REG75 – edge enhancement lower threshold (smaller = more edges
+        // get enhanced, including noise; bigger = only strong edges).
         reg_table[123] = 16'h7505; // REG75
 
         // TWEAK: REG76 – disable white-pixel correction
@@ -215,7 +230,12 @@ module sccb_master (
         reg_table[127] = 16'h4b09; // reserved
         reg_table[128] = 16'hc9f0; // reserved
         reg_table[129] = 16'h4138; // COM21
-        reg_table[130] = 16'h5640; // reserved
+
+        // TWEAK (FIX): CONTRAS (0x56) – contrast control.  Image looks
+        // washed-out / low-contrast at default 0x40.  Bumping to 0x50
+        // gives noticeably punchier blacks & whites, also helps make
+        // the Binary filter threshold land more cleanly.
+        reg_table[130] = 16'h5650; // CONTRAS (was 0x40)
 
         // ----- Lens correction / advanced -----
         reg_table[131] = 16'h3411; // ARBLM
