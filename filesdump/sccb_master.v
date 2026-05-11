@@ -45,7 +45,13 @@ module sccb_master (
         reg_table[5]   = 16'h40d0; // COM15 – RGB565, full range (re-affirm)
         reg_table[6]   = 16'h3a04; // TSLB  – YUYV sequence
         reg_table[7]   = 16'h3dc8; // COM13 – gamma enable, UV auto adjust
-        reg_table[8]   = 16'h1e31; // MVFP  – mirror + vflip (adjust to suit camera orientation)
+        
+        reg_table[8]   = 16'h1e01; // MVFP  – mirror + vflip (adjust to suit camera orientation)
+        // 1e21:    Mirror On,      VFlip Off
+        // 1e01:    both Off
+        // 1e11:    Mirror OFF,     VFilp On
+        // 1e31:    both On
+        
         reg_table[9]   = 16'h6b00; // DBLV  – PLL bypass
         reg_table[10]  = 16'h32b6; // HREF  – HREF control
         reg_table[11]  = 16'h1713; // HSTART – horizontal frame start
