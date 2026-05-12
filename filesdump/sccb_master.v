@@ -46,7 +46,7 @@ module sccb_master (
         reg_table[6]   = 16'h3a04; // TSLB  – YUYV sequence
         reg_table[7]   = 16'h3dc8; // COM13 – gamma enable, UV auto adjust
         
-        reg_table[8]   = 16'h1e01; // MVFP  – mirror + vflip (adjust to suit camera orientation)
+        reg_table[8]   = 16'h1e21; // MVFP  – mirror + vflip (adjust to suit camera orientation)
         // 1e21:    Mirror On,      VFlip Off
         // 1e01:    both Off
         // 1e11:    Mirror OFF,     VFilp On
