@@ -191,21 +191,21 @@ module camera_top (
 
     // True when inside the rotated image (not in a letterbox bar).
     //
-    // WHY left boundary is 52 not 48:
-    //   frame_buffer has 1-cycle BRAM read latency.
-    //   At cycle sx=N: rd_addr is set for sx=N
-    //   At cycle sx=N+1: doutb = data from addr(sx=N)   <-- 1 cycle late
-    //   So the mux at sx=48 shows rd_data that was fetched for sx=47
-    //   (an out-of-image address), which can be any bright pixel value
-    //   -> visible as a 1-pixel white stripe.
-    //   Setting in_image to sx>=52 gives 4 pre-fetch cycles of margin
-    //   so rd_data is always valid+in-range when in_image is high.
+    // Left boundary sx>=64 explanation:
+    //   With CW rotation, source_row = 279 - sx.
+    //   OV7670 emits glitched bright rows in the last ~24 rows before VSYNC
+    //   (source rows 216..239).  Those appear at display sx = 279-239=40
+    //   to 279-216=63.  Setting in_image left edge at 64 guarantees no
+    //   glitch row is ever displayed, even if BRAM init does not synthesize.
+    //   cam_capture now also skips writing rows 216..239 (SKIP_BOTTOM_ROWS=24)
+    //   so those BRAM cells stay at their init value (0x000 = black).
     //
-    // WHY left boundary is larger than right (52 vs 272):
-    //   Left  (sx=40..51): hides source rows 228..239 (glitched bottom rows)
-    //   Right (sx=272..319): hides source rows 0..7 (SKIP_TOP_ROWS area) + letterbox
-    //   If a right-edge stripe appears too, change 272 -> 268.
-    wire in_image = (sx >= 9'd52) && (sx < 9'd272);
+    // Right boundary sx<272: source rows 0..7 (SKIP_TOP_ROWS area, never written)
+    //
+    //   Effective image: sx=64..271 = 208 columns = 208 source rows displayed
+    //   Left  bar: 0..63  (64 px = 40 letterbox + 24 hidden glitch rows)
+    //   Right bar: 272..319 (48 px = 8 hidden top rows + 40 letterbox)
+    wire in_image = (sx >= 9'd64) && (sx < 9'd272);
 
     // 90 deg CW rotation (r4 fix: was CCW, image came out upside-down).
     //

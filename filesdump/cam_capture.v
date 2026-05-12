@@ -19,24 +19,24 @@
 //   2. wr_addr is COMBINATIONAL (= y*320 + x) so it is valid one
 //      cycle before wr_en – correct setup time for the BRAM.
 //   3. 'enable' input gates wr_en.  Tie this to sccb_done so the
-//      BRAM is never written before camera registers are programmed
-//      (the camera defaults to VGA otherwise – writes garbage).
-//   4. The first SKIP_TOP_ROWS lines of each frame are skipped (still
-//      counted but no write).  This hides the residual blanking
-//      stripe the OV7670 emits and which was visible as a magenta
-//      band at the top of the screen.
+//      BRAM is never written before camera registers are programmed.
+//   4. SKIP_TOP_ROWS and SKIP_BOTTOM_ROWS: the OV7670 emits glitched
+//      pixels at the START and END of every frame (before VSYNC resets).
+//      Both zones are skipped to prevent garbage reaching the buffer.
+//      With 90-deg CW rotation these appear as vertical stripes at the
+//      screen edges and must be hidden.
 // ============================================================
 module cam_capture #(
-    // How many rows at top of each frame to discard.  These contain
-    // the OV7670's residual blanking/colour-balance pixels which
-    // appeared as a magenta band on screen.  Override to 0 in
-    // testbenches that send only a few pixels per row.
-    parameter [7:0] SKIP_TOP_ROWS = 8'd8     // r3-fix: was 2, bumped to 8
-                                              // because OV7670 emits glitched
-                                              // pixels for the first few rows
-                                              // of every frame and they now
-                                              // show up at the LEFT edge of
-                                              // the rotated image.
+    // Rows at TOP of frame to discard (OV7670 start-of-frame glitch).
+    // After 90 CW rotation these appear on the RIGHT edge of display.
+    parameter [7:0] SKIP_TOP_ROWS    = 8'd8,
+
+    // Rows at BOTTOM of frame to discard (OV7670 pre-VSYNC glitch).
+    // After 90 CW rotation these appear on the LEFT edge of display.
+    // Root cause of the persistent white stripe: rows 220-239 had
+    // bright/glitched data written to BRAM and in_image could not
+    // hide them all.  Skipping 24 rows stops the write at source y=216.
+    parameter [7:0] SKIP_BOTTOM_ROWS = 8'd24
 ) (
     input  wire        pclk,
     input  wire        href,
@@ -85,8 +85,15 @@ module cam_capture #(
                     // Only WRITE when:
                     //   (a) camera has been configured (enable=1)
                     //   (b) we are inside the 320x240 region
-                    //   (c) we are past the SKIP_TOP_ROWS blanking strip
-                    if (enable && x < 320 && y < 240 && y >= SKIP_TOP_ROWS) begin
+                    //   (c) past the start-of-frame glitch rows (SKIP_TOP_ROWS)
+                    //   (d) before the end-of-frame glitch rows (SKIP_BOTTOM_ROWS)
+                    //       THIS was the real cause of the white stripe:
+                    //       OV7670 emits bright garbage in the last ~20 rows
+                    //       before VSYNC.  After CW rotation those rows appear
+                    //       at the LEFT edge of the display as a white stripe.
+                    if (enable && x < 320 &&
+                        y >= SKIP_TOP_ROWS &&
+                        y < (8'd240 - SKIP_BOTTOM_ROWS)) begin
                         wr_data <= { byte1[7:4],           // R[3:0]
                                      byte1[2:0], din[7],   // G[3:0]
                                      din[4:1]              // B[3:0]
