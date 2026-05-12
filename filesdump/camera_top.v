@@ -189,18 +189,31 @@ module camera_top (
     wire [8:0] sx = {1'b0, vga_col[9:1]};   // screen x: 0..319
     wire [7:0] sy =        vga_row[9:1];    // screen y: 0..239
 
-    // True when inside the rotated image (not in a letterbox bar)
-    wire in_image = (sx >= 9'd40) && (sx < 9'd280);
+    // True when inside the rotated image (not in a letterbox bar).
+    // With CW rotation the source frame maps as:
+    //   sx=40..47   -> source rows 232..239 (BOTTOM of frame, glitched pre-VSYNC)
+    //   sx=272..279 -> source rows 0..7     (TOP of frame, covered by SKIP_TOP_ROWS)
+    // Hide 8 rows on each side so both stripes are invisble regardless of
+    // whether BRAM initial block synthesizes on this device.
+    //   Effective image area: sx=48..271 (224 columns = 224 source rows shown)
+    //   Left  black bar: sx 0..47   (40 letterbox + 8 hidden bottom rows)
+    //   Right black bar: sx 272..319 (8 hidden top rows + 40 letterbox)
+    wire in_image = (sx >= 9'd48) && (sx < 9'd272);
 
-    // Map screen coords -> rotated-image coords -> source coords
-    //   rotated_col = sx - 40         (range 0..239)
-    //   rotated_row = sy + 40         (range 40..279, picks middle 240 rows)
-    //   cam_col     = 319 - rotated_row = 319 - (sy + 40) = 279 - sy
-    //                                                       (range 40..279)
-    //   cam_row     = rotated_col     = sx - 40 (range 0..239)
-    wire [8:0] cam_col      = 9'd279 - {1'b0, sy};    // 0..319 width source
-    wire [8:0] cam_row_9bit = sx     - 9'd40;         // 9-bit safe subtract
-    wire [7:0] cam_row      = cam_row_9bit[7:0];      // 0..239 height source
+    // 90 deg CW rotation (r4 fix: was CCW, image came out upside-down).
+    //
+    // Derivation for CW:
+    //   source_col = rotated_row               = sy + 40   (range 40..279)
+    //   source_row = (source_height-1) - rotated_col
+    //              = 239 - (sx - 40)           = 279 - sx  (range 0..239)
+    //
+    // Layout (rotated 240-wide portrait in 320-wide landscape screen):
+    //   sx 0..47  -> BLACK BAR  (left, 48px: 40 letterbox + 8 hidden glitch rows)
+    //   sx 48..279 -> CW-rotated image (232 source-row columns displayed)
+    //   sx 280..319 -> BLACK BAR (right, 40px)
+    wire [8:0] cam_col      = {1'b0, sy} + 9'd40;   // 40..279, source col
+    wire [8:0] cam_row_9bit = 9'd279     - sx;       // 0..239, source row
+    wire [7:0] cam_row      = cam_row_9bit[7:0];
 
     // addr = cam_row * 320 + cam_col
     //      = (cam_row << 8) + (cam_row << 6) + cam_col   (=256+64=320)

@@ -217,17 +217,12 @@ module sccb_master (
         // ----- Misc -----
         reg_table[121] = 16'h4108; // COM21 (partial)
 
-        // TWEAK (FIX r3): EDGE – sharpening lowered.
-        // Round-2 set this to 0x06 to fight blur from the glued lens,
-        // but heavy sharpening over-amplifies the cheap-lens chromatic
-        // aberration -> bright objects gain pink/purple halos.
-        // 0x02 is a gentler compromise: still sharper than off, but
-        // does not blow up colour noise.
-        //   0x00 = off
-        //   0x02 = mild (CURRENT - good balance)
-        //   0x06 = moderate (caused pink halos)
-        //   0x0a = aggressive (too much fringing)
-        reg_table[122] = 16'h3f02; // EDGE (was 0x06)
+        // TWEAK (FIX r4): EDGE – disabled completely.
+        // 0x02 (mild) still amplified the OV7670 colour noise badly in any
+        // scene that isn't very bright.  Turning it off means the image is
+        // softer but the speckle noise is far less visible.  If your demo
+        // room is bright, you can try 0x02 again.
+        reg_table[122] = 16'h3f00; // EDGE (was 0x02, now off)
 
         // TWEAK (FIX r3): REG75 – edge enhancement lower threshold.
         // Higher = noise/small detail does NOT get sharpened,
