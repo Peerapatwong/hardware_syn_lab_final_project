@@ -31,7 +31,12 @@ module cam_capture #(
     // the OV7670's residual blanking/colour-balance pixels which
     // appeared as a magenta band on screen.  Override to 0 in
     // testbenches that send only a few pixels per row.
-    parameter [7:0] SKIP_TOP_ROWS = 8'd2
+    parameter [7:0] SKIP_TOP_ROWS = 8'd8     // r3-fix: was 2, bumped to 8
+                                              // because OV7670 emits glitched
+                                              // pixels for the first few rows
+                                              // of every frame and they now
+                                              // show up at the LEFT edge of
+                                              // the rotated image.
 ) (
     input  wire        pclk,
     input  wire        href,
