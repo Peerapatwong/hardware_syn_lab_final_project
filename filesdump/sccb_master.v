@@ -108,10 +108,13 @@ module sccb_master (
         reg_table[42]  = 16'h1000; // AECH
         reg_table[43]  = 16'h0d00; // COM4
 
-        // TWEAK: COM9 – AGC ceiling x2 (was x4).  Lower ceiling
-        // means the camera will not amplify weak signals as much,
-        // reducing noise in good lighting.
-        reg_table[44]  = 16'h1418; // COM9   – AGC ceiling x2
+        // TWEAK (FIX r5): COM9 – AGC ceiling corrected.
+        // bits[6:4]: 000=2x  001=4x  010=8x ...
+        // Old value 0x18 = 0001_1000 -> bits[6:4]=001 -> 4x (comment was wrong!)
+        // New value 0x08 = 0000_1000 -> bits[6:4]=000 -> 2x (true minimum)
+        // Covered-lens full-noise is EXPECTED: any camera maximises gain in
+        // darkness.  2x ceiling keeps normal indoor scenes much cleaner.
+        reg_table[44]  = 16'h1408; // COM9 – AGC ceiling 2x (was 0x18 = actually 4x)
 
         reg_table[45]  = 16'ha505; // BD50MAX
         reg_table[46]  = 16'hab07; // DB60MAX

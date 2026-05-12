@@ -190,15 +190,22 @@ module camera_top (
     wire [7:0] sy =        vga_row[9:1];    // screen y: 0..239
 
     // True when inside the rotated image (not in a letterbox bar).
-    // With CW rotation the source frame maps as:
-    //   sx=40..47   -> source rows 232..239 (BOTTOM of frame, glitched pre-VSYNC)
-    //   sx=272..279 -> source rows 0..7     (TOP of frame, covered by SKIP_TOP_ROWS)
-    // Hide 8 rows on each side so both stripes are invisble regardless of
-    // whether BRAM initial block synthesizes on this device.
-    //   Effective image area: sx=48..271 (224 columns = 224 source rows shown)
-    //   Left  black bar: sx 0..47   (40 letterbox + 8 hidden bottom rows)
-    //   Right black bar: sx 272..319 (8 hidden top rows + 40 letterbox)
-    wire in_image = (sx >= 9'd48) && (sx < 9'd272);
+    //
+    // WHY left boundary is 52 not 48:
+    //   frame_buffer has 1-cycle BRAM read latency.
+    //   At cycle sx=N: rd_addr is set for sx=N
+    //   At cycle sx=N+1: doutb = data from addr(sx=N)   <-- 1 cycle late
+    //   So the mux at sx=48 shows rd_data that was fetched for sx=47
+    //   (an out-of-image address), which can be any bright pixel value
+    //   -> visible as a 1-pixel white stripe.
+    //   Setting in_image to sx>=52 gives 4 pre-fetch cycles of margin
+    //   so rd_data is always valid+in-range when in_image is high.
+    //
+    // WHY left boundary is larger than right (52 vs 272):
+    //   Left  (sx=40..51): hides source rows 228..239 (glitched bottom rows)
+    //   Right (sx=272..319): hides source rows 0..7 (SKIP_TOP_ROWS area) + letterbox
+    //   If a right-edge stripe appears too, change 272 -> 268.
+    wire in_image = (sx >= 9'd52) && (sx < 9'd272);
 
     // 90 deg CW rotation (r4 fix: was CCW, image came out upside-down).
     //
