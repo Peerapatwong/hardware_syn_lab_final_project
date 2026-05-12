@@ -26,11 +26,14 @@ module frame_buffer (
     (* ram_style = "block" *)
     reg [11:0] mem [0:76799];
 
-    // Initialise to mid-grey so you see something before camera starts
+    // Initialise to BLACK so unwritten cells are invisible.
+    // (Was 12'h888 / mid-grey, which showed up as a bright stripe at the
+    //  left edge of the rotated image, since the first SKIP_TOP_ROWS of
+    //  the source frame are never written and map there after 90 CCW.)
     integer i;
     initial begin
         for (i = 0; i < 76800; i = i + 1)
-            mem[i] = 12'h888;
+            mem[i] = 12'h000;
     end
 
     // Port A – synchronous write

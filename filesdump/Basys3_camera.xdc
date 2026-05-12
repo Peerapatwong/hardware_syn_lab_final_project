@@ -61,22 +61,22 @@ set_property PACKAGE_PIN C15  [get_ports cam_xclk]
 set_property IOSTANDARD LVCMOS33 [get_ports cam_xclk]
 
 ## -------- VGA connector -------------------------------------
-set_property PACKAGE_PIN G19  [get_ports vga_r[0]]
-set_property PACKAGE_PIN H19  [get_ports vga_r[1]]
-set_property PACKAGE_PIN J19  [get_ports vga_r[2]]
-set_property PACKAGE_PIN N19  [get_ports vga_r[3]]
+set_property PACKAGE_PIN G19  [get_ports {vga_r[0]}]
+set_property PACKAGE_PIN H19  [get_ports {vga_r[1]}]
+set_property PACKAGE_PIN J19  [get_ports {vga_r[2]}]
+set_property PACKAGE_PIN N19  [get_ports {vga_r[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {vga_r[*]}]
 
-set_property PACKAGE_PIN J17  [get_ports vga_g[0]]
-set_property PACKAGE_PIN H17  [get_ports vga_g[1]]
-set_property PACKAGE_PIN G17  [get_ports vga_g[2]]
-set_property PACKAGE_PIN D17  [get_ports vga_g[3]]
+set_property PACKAGE_PIN J17  [get_ports {vga_g[0]}]
+set_property PACKAGE_PIN H17  [get_ports {vga_g[1]}]
+set_property PACKAGE_PIN G17  [get_ports {vga_g[2]}]
+set_property PACKAGE_PIN D17  [get_ports {vga_g[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {vga_g[*]}]
 
-set_property PACKAGE_PIN N18  [get_ports vga_b[0]]
-set_property PACKAGE_PIN L18  [get_ports vga_b[1]]
-set_property PACKAGE_PIN K18  [get_ports vga_b[2]]
-set_property PACKAGE_PIN J18  [get_ports vga_b[3]]
+set_property PACKAGE_PIN N18  [get_ports {vga_b[0]}]
+set_property PACKAGE_PIN L18  [get_ports {vga_b[1]}]
+set_property PACKAGE_PIN K18  [get_ports {vga_b[2]}]
+set_property PACKAGE_PIN J18  [get_ports {vga_b[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {vga_b[*]}]
 
 set_property PACKAGE_PIN P19  [get_ports vga_hsync]
@@ -84,11 +84,20 @@ set_property IOSTANDARD LVCMOS33 [get_ports vga_hsync]
 set_property PACKAGE_PIN R19  [get_ports vga_vsync]
 set_property IOSTANDARD LVCMOS33 [get_ports vga_vsync]
 
-## -------- Slide switches (filter select) --------------------
+## -------- Slide switches ------------------------------------
+## sw[1:0]  = filter mode select
+##   00 = Raw  01 = Invert  10 = Binary  11 = Color Isolation
+## sw[3:2]  = filter parameter:
+##   in Binary       -> threshold preset
+##   in ColorIsolate -> R/G/B/RB channel select
 set_property PACKAGE_PIN V17  [get_ports {sw[0]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {sw[0]}]
 set_property PACKAGE_PIN V16  [get_ports {sw[1]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {sw[1]}]
+set_property PACKAGE_PIN W16  [get_ports {sw[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sw[2]}]
+set_property PACKAGE_PIN W17  [get_ports {sw[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sw[3]}]
 
 ## -------- Status LEDs ----------------------------------------
 set_property PACKAGE_PIN U16  [get_ports {led[0]}]
@@ -100,7 +109,7 @@ set_property IOSTANDARD LVCMOS33 [get_ports {led[2]}]
 set_property PACKAGE_PIN V19  [get_ports {led[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[3]}]
 
-## -------- CDC false paths (camera → VGA clock domain) -------
+## -------- CDC false paths (camera -> VGA clock domain) ------
 ## The BRAM handles CDC; tell the timing engine not to analyze across domains
 set_false_path -from [get_clocks -of_objects [get_ports cam_pclk]] \
                -to   [get_clocks clk_out1_clk_wiz_0]
