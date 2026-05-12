@@ -57,14 +57,16 @@ module sccb_master (
         reg_table[6]   = 16'h3a04; // TSLB  – YUYV sequence
         reg_table[7]   = 16'h3dc8; // COM13 – gamma enable, UV auto adjust
 
-        // TWEAK (FIX): MVFP – mirror ON + VFLIP ON to correct the
-        // upside-down image observed on hardware.  The OV7670 sensor on
-        // this module is physically rotated so VFLIP is needed.
-        //   0x01 = normal       (no mirror, no flip)
-        //   0x11 = vflip only   (text readable, up is down -> fixed)
-        //   0x21 = mirror only  (was OLD value -> caused upside-down)
-        //   0x31 = mirror+vflip (CURRENT - 180 deg total, "selfie style")
-        reg_table[8]   = 16'h1e31; // MVFP (was 0x21)
+        // TWEAK (FIX r3): MVFP – ALL FLIPS DISABLED.
+        // Previous round used 0x31 (mirror+vflip), but the rotation is
+        // now handled in camera_top.v (90 deg CCW in the read address).
+        // Using VFLIP in the sensor can also cause known timing/pixel
+        // artifacts on OV7670 modules, so we keep the sensor in its
+        // most-stable mode.
+        //   0x00 = no mirror, no flip (CURRENT)
+        //   0x21 = mirror only
+        //   0x31 = mirror + vflip
+        reg_table[8]   = 16'h1e00; // MVFP (was 0x31)
 
         reg_table[9]   = 16'h6b00; // DBLV  – PLL bypass
         reg_table[10]  = 16'h32b6; // HREF
@@ -183,37 +185,57 @@ module sccb_master (
         reg_table[106] = 16'h6d55; // AWBCTR2
         reg_table[107] = 16'h6e11; // AWBCTR1
         reg_table[108] = 16'h6f9f; // AWBCTR0
-        reg_table[109] = 16'h6a40; // GGAIN
-        reg_table[110] = 16'h0140; // BLUE gain
-        reg_table[111] = 16'h0240; // RED  gain
+        reg_table[109] = 16'h6a40; // GGAIN (green channel gain, keep at default)
+
+        // TWEAK (FIX r4): Target pink fringing at the gain stage.
+        // Trimming RED and BLUE gain slightly reduces pink/purple cast from
+        // chromatic aberration WITHOUT desaturating the whole image the way
+        // the round-3 MTX reduction did.
+        //   Default for both = 0x40
+        //   0x38 = -12.5% (trim R+B, leave G alone -> cooler/more neutral)
+        // AWB (COM8 bit1) is still ON so it will push back somewhat; the
+        // manual trim acts as a bias towards less pink overall.
+        reg_table[110] = 16'h0138; // BLUE gain (was 0x40, trim -12.5%)
+        reg_table[111] = 16'h0238; // RED  gain (was 0x40, trim -12.5%)
         reg_table[112] = 16'h13e7; // COM8  – enable all auto functions
         reg_table[113] = 16'h1500; // COM10 – PCLK/VSYNC/HREF polarity
 
         // ----- Colour matrix (full) -----
-        reg_table[114] = 16'h4f80; // MTX1
-        reg_table[115] = 16'h5080; // MTX2
-        reg_table[116] = 16'h5100; // MTX3
-        reg_table[117] = 16'h5222; // MTX4
-        reg_table[118] = 16'h535e; // MTX5
-        reg_table[119] = 16'h5480; // MTX6
-        reg_table[120] = 16'h589e; // MTXS – sign + auto contrast
+        // r3-fix was WRONG: reducing MTX by 25% killed saturation and made
+        // colors look faded/grey.  Restored to the standard OV7670 values.
+        // Pink fringing is now fought via the per-channel gain registers
+        // (BLUE_GAIN/RED_GAIN below) instead – that trims R+B without
+        // desaturating the whole image.
+        reg_table[114] = 16'h4f80; // MTX1 (restored to 0x80)
+        reg_table[115] = 16'h5080; // MTX2 (restored to 0x80)
+        reg_table[116] = 16'h5100; // MTX3 unchanged (0x00)
+        reg_table[117] = 16'h5222; // MTX4 (restored to 0x22)
+        reg_table[118] = 16'h535e; // MTX5 (restored to 0x5e)
+        reg_table[119] = 16'h5480; // MTX6 (restored to 0x80)
+        reg_table[120] = 16'h589e; // MTXS – sign + auto contrast (unchanged)
 
         // ----- Misc -----
         reg_table[121] = 16'h4108; // COM21 (partial)
 
-        // TWEAK (FIX): EDGE – enable edge enhancement to compensate for
-        // the GLUED LENS that cannot be focused mechanically.  This adds
-        // digital sharpening inside the sensor.  Higher = sharper but
-        // more pink/purple fringes around bright edges.
-        //   0x00 = off  (was OLD value -> looked blurry)
-        //   0x04 = mild sharpening
-        //   0x06 = moderate (CURRENT - good balance for fixed lens)
-        //   0x0a = aggressive (too much fringing usually)
-        reg_table[122] = 16'h3f06; // EDGE (was 0x00)
+        // TWEAK (FIX r3): EDGE – sharpening lowered.
+        // Round-2 set this to 0x06 to fight blur from the glued lens,
+        // but heavy sharpening over-amplifies the cheap-lens chromatic
+        // aberration -> bright objects gain pink/purple halos.
+        // 0x02 is a gentler compromise: still sharper than off, but
+        // does not blow up colour noise.
+        //   0x00 = off
+        //   0x02 = mild (CURRENT - good balance)
+        //   0x06 = moderate (caused pink halos)
+        //   0x0a = aggressive (too much fringing)
+        reg_table[122] = 16'h3f02; // EDGE (was 0x06)
 
-        // REG75 – edge enhancement lower threshold (smaller = more edges
-        // get enhanced, including noise; bigger = only strong edges).
-        reg_table[123] = 16'h7505; // REG75
+        // TWEAK (FIX r3): REG75 – edge enhancement lower threshold.
+        // Higher = noise/small detail does NOT get sharpened,
+        // so only real edges are enhanced.  This is the main lever
+        // for cutting down "pink speckle on uniform areas".
+        //   0x05 = original / aggressive
+        //   0x0f = stronger threshold (CURRENT)
+        reg_table[123] = 16'h750f; // REG75 (was 0x05)
 
         // TWEAK: REG76 – disable white-pixel correction
         //   bit7 = 1 enables "white pixel correction" which is intended
