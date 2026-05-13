@@ -2,13 +2,11 @@
 // cam_capture.v  –  OV7670 parallel data capture
 //
 // The OV7670 in RGB565 mode sends each pixel as TWO bytes:
-//   Byte 1 (first PCLK):  [R4 R3 R2 R1 R0 G5 G4 G3]
-//   Byte 2 (second PCLK): [G2 G1 G0 B4 B3 B2 B1 B0]
+//   Byte 1 (first PCLK):  [XX XX XX XX R3 R2 R1 R0]
+//   Byte 2 (second PCLK): [G3 G2 G1 G0 B3 B2 B1 B0]
 //
-// We down-convert to 12-bit RGB444 for BRAM storage:
-//   R[3:0] = byte1[7:4]              (top 4 of 5 red bits)
-//   G[3:0] = {byte1[2:0], byte2[7]}  (top 4 of 6 green bits)
-//   B[3:0] = byte2[4:1]              (top 4 of 5 blue bits)
+// We bit concat 2 bytes into 12 bit for BRAM storage:
+//   {Byte1[3:0], Byte2}
 //
 // Frame size written: 320 x 240 = 76,800 pixels
 //
@@ -94,10 +92,14 @@ module cam_capture #(
                     if (enable && x < 320 &&
                         y >= SKIP_TOP_ROWS &&
                         y < (8'd240 - SKIP_BOTTOM_ROWS)) begin
-                        wr_data <= { byte1[7:4],           // R[3:0]
-                                     byte1[2:0], din[7],   // G[3:0]
-                                     din[4:1]              // B[3:0]
+                        
+                        wr_data <= { byte1[3:0],           // R[3:0]
+                                     din[7:4],             // G[3:0]
+                                     din[3:0]              // B[3:0]
                                    };
+                      
+                            
+                                   
                         wr_en <= 1'b1;
                     end
 
